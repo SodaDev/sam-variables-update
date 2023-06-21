@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template for updating-vars
+Parameters:
+  LogLevel:
+    Type: String
+    AllowedValues:
+      - DEBUG
+      - INFO
+      - WARN
+      - ERROR
+      - SILENT
+Globals:
+  Function:
+    Timeout: 15
+    MemorySize: 128
+Mappings:
+  Properties:
+    PizzeriaProps:
+      ShouldPutPizzaOnPineapple: false
+
+Resources:
+  UpdatingVars:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./updating-vars/template.yaml
+      # Optional parameter that can have default value overridden
+      Parameters:
+        LogLevel: !Ref LogLevel
+        ShouldPutPizzaOnPineapple: !FindInMap [Properties, PizzeriaProps, ShouldPutPizzaOnPineapple]
+  NotUpdatingVars:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location: ./not-updating-vars/template.yaml
+      Parameters:
+        LogLevel: !Ref LogLevel
+        ShouldPutPizzaOnPineapple: !FindInMap [Properties, PizzeriaProps, ShouldPutPizzaOnPineapple]

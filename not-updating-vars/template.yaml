@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: SAM Template for not-updating-vars
+
+Parameters:
+  LogLevel:
+    Type: String
+    AllowedValues:
+      - DEBUG
+      - INFO
+      - WARN
+      - ERROR
+      - SILENT
+  ShouldPutPizzaOnPineapple:
+    Type: String
+
+Globals:
+  Function:
+    Timeout: 3
+    MemorySize: 128
+
+Resources:
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub
+        - '/aws/lambda/${LambdaName}'
+        - { LambdaName: !Ref Function }
+      RetentionInDays: 14
+
+  Function:
+    # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: NotUpdatingVars
+      CodeUri: app/
+      Handler: app.handler
+      Runtime: nodejs16.x
+      Architectures:
+        - arm64
+      Tracing: Active
+      AutoPublishAlias: live
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/otel-handler
+          
+          OPENTELEMETRY_COLLECTOR_CONFIG_FILE:
+            !Sub
+            - '{{resolve:ssm:${ConfigLocation}}}'
+            - ConfigLocation:
+                Fn::ImportValue: OTEL::CollectorConfig::S3Location
+
+          OPENTELEMETRY_EXTENSION_LOG_LEVEL: warn
+          OTEL_SERVICE_NAME: not-updating-vars
+          POWERTOOLS_SERVICE_NAME: not-updating-vars
+
+          PUT_PINEAPPLE_ON_PIZZA: !Ref ShouldPutPizzaOnPineapple
+      Layers:
+        - !Sub arn:aws:lambda:${AWS::Region}:901920570463:layer:aws-otel-nodejs-arm64-ver-1-12-0:1
+      Policies:
+        - Fn::ImportValue: OTEL::CollectorConfig::AccessPolicy
+    Metadata: # Manage esbuild properties
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        # Sourcemap: true # Enabling source maps will create the required NODE_OPTIONS environment variables on your lambda function during sam build
+        EntryPoints: 
+        - app.ts
+
+  # TODO: Adjust and extend alarms
+  FunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Lambda errors
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref Function
+      Statistic: Sum
+      EvaluationPeriods: 1
+      Threshold: 1.0
+      TreatMissingData: notBreaching
+      Period: 300
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions:
+        - Fn::ImportValue: OTEL::SNS:AlarmTopicArn
+      OKActions:
+        - Fn::ImportValue: OTEL::SNS:AlarmTopicArn
