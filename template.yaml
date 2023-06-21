@@ -17,7 +17,7 @@ Globals:
 Mappings:
   Properties:
     PizzeriaProps:
-      ShouldPutPizzaOnPineapple: false
+      ShouldPutPizzaOnPineapple: true
 
 Resources:
   UpdatingVars:
